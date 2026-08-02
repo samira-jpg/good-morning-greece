@@ -6,29 +6,121 @@ import json
 import os
 import re
 import datetime
+import html
+import threading
+import time
 from urllib.parse import urlparse
 
 PORT = 8000
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'public')
+CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'news_cache.json')
 
 # Keywords to filter news for positive vibes and filter out negative ones
 POSITIVE_KEYWORDS = [
-    "success", "win", "award", "gold", "medal", "champion", "innovate", "innovation", 
-    "startup", "technology", "discover", "discovery", "archaeology", "ancient", 
-    "excavation", "protect", "conservation", "save", "rescue", "help", "volunteer", 
-    "solidarity", "donation", "growth", "increase", "rise", "tourist", "tourism", 
-    "culture", "festival", "art", "exhibition", "beautiful", "sunshine", "clean", 
-    "renewable", "solar", "wind", "ecological", "restore", "reforestation", 
-    "celebrate", "historic", "achievement", "triumph", "olympic", "kindness", "hero"
+    "success", "successful", "successfully", "succeed", "succeeded",
+    "win", "wins", "winning", "winner", "winners", "won",
+    "award", "awards", "awarded",
+    "gold", "golden",
+    "medal", "medals", "medalist",
+    "champion", "champions", "championship",
+    "innovate", "innovation", "innovations", "innovative", "innovator",
+    "startup", "startups",
+    "technology", "technologies", "technological", "tech",
+    "discover", "discovery", "discoveries", "discovered",
+    "archaeology", "archaeological", "archaeologist", "archaeologists",
+    "ancient",
+    "excavation", "excavations", "excavate",
+    "protect", "protects", "protecting", "protection", "protective",
+    "conservation", "conserve",
+    "save", "saves", "saving", "saved",
+    "rescue", "rescued", "rescues",
+    "help", "helps", "helping", "helped", "helper",
+    "volunteer", "volunteers", "volunteered", "volunteering",
+    "solidarity",
+    "donation", "donations", "donate", "donated",
+    "growth", "grow", "growing", "grows",
+    "increase", "increased", "increases", "increasing",
+    "rise", "rises", "rising", "rose",
+    "tourist", "tourists", "tourism",
+    "culture", "cultural",
+    "festival", "festivals",
+    "art", "arts", "artistic", "artist", "artists",
+    "exhibition", "exhibitions",
+    "beautiful", "beauty",
+    "sunshine", "sunny",
+    "clean", "cleaned", "cleaning",
+    "renewable", "renewables",
+    "solar",
+    "wind",
+    "ecological", "ecology",
+    "restore", "restored", "restoration", "restoring",
+    "reforestation",
+    "celebrate", "celebrates", "celebrated", "celebrating", "celebration",
+    "historic", "historical", "history",
+    "achievement", "achievements", "achieve", "achieved",
+    "triumph", "triumphs", "triumphant",
+    "olympic", "olympics",
+    "kindness", "kind",
+    "hero", "heroes", "heroic"
 ]
 
 NEGATIVE_KEYWORDS = [
-    "murder", "kill", "die", "dead", "death", "crash", "accident", "arrest", 
-    "theft", "steal", "rob", "fraud", "corruption", "crisis", "strike", "protest", 
-    "riot", "clash", "bomb", "attack", "shooting", "kidnap", "disaster", "earthquake", 
-    "wildfire", "fire", "flood", "leak", "drown", "bankrupt", "inflation", "recession", 
-    "threat", "scam", "jail", "prison", "assault", "violence", "tragedy", "tension"
+    "murder", "murders", "murdered", "murdering",
+    "kill", "kills", "killed", "killing", "killer",
+    "die", "dies", "died", "dying",
+    "dead",
+    "death", "deaths",
+    "crash", "crashes", "crashed",
+    "accident", "accidents",
+    "arrest", "arrests", "arrested",
+    "theft", "thefts",
+    "steal", "steals", "stealing", "stole", "stolen",
+    "rob", "robs", "robbed", "robbing", "robbery", "robberies",
+    "fraud",
+    "corruption",
+    "crisis", "crises",
+    "strike", "strikes",
+    "protest", "protests", "proested",
+    "riot", "riots",
+    "clash", "clashes", "clashed",
+    "bomb", "bombs", "bombed", "bombing",
+    "attack", "attacks", "attacked", "attacking",
+    "shooting", "shootings", "shoot", "shoots", "shot",
+    "kidnap", "kidnaps", "kidnapped", "kidnapping",
+    "disaster", "disasters", "disastrous",
+    "earthquake", "earthquakes",
+    "wildfire", "wildfires",
+    "fire", "fires", "fired", "firefighter", "firefighters",
+    "blaze", "blazes", "burning", "burns", "burned", "smoke",
+    "flood", "floods", "flooded",
+    "leak", "leaks", "leaked",
+    "drown", "drowns", "drowned", "drowning",
+    "bankrupt", "bankruptcy",
+    "inflation",
+    "recession",
+    "threat", "threats", "threaten", "threatened", "threatening",
+    "scam", "scams",
+    "jail", "jails",
+    "prison", "prisons",
+    "assault", "assaults", "assaulted",
+    "violence", "violent",
+    "tragedy", "tragedies", "tragic",
+    "tension", "tensions",
+    "stab", "stabs", "stabbed", "stabbing",
+    "wound", "wounds", "wounded",
+    "injure", "injures", "injured", "injury", "injuries",
+    "struggle", "struggles", "struggling",
+    "migrant", "migrants",
+    "drought", "droughts",
+    "evacuate", "evacuations", "evacuation", "evacuated"
 ]
+
+def compile_keyword_regex(keywords):
+    pattern = r'\b(' + '|'.join(re.escape(k) for k in keywords) + r')\b'
+    return re.compile(pattern, re.IGNORECASE)
+
+POSITIVE_REGEX = compile_keyword_regex(POSITIVE_KEYWORDS)
+NEGATIVE_REGEX = compile_keyword_regex(NEGATIVE_KEYWORDS)
 
 REGIONS = {
     "Athens": [37.9838, 23.7275],
@@ -60,132 +152,140 @@ REGIONS = {
     "Kos": [36.8931, 27.2872]
 }
 
-# 10 rich seeded positive Greek news stories to guarantee immediate, high-fidelity data
-SEED_NEWS = [
-    {
-        "title": "Greece Runs Entirely on 100% Clean Energy for the First Time in History",
-        "link": "https://greekreporter.com/2022/10/11/greece-runs-100-percent-clean-energy-first-time/",
-        "description": "Greece reached a historic milestone as the country's electricity grid ran entirely on renewable energy for several hours, showing the success of solar and wind investment.",
-        "source": "Greek Reporter",
-        "pubDate": "Sun, 02 Aug 2026 09:00:00 GMT",
-        "location": "Peloponnese",
-        "coords": [37.4856, 22.3653],
-        "category": "Environment & Nature"
-    },
-    {
-        "title": "Remarkable 2,500-Year-Old Temple Discovered Unspoiled in Ancient Delphi",
-        "link": "https://greekreporter.com/2025/08/12/ancient-greek-temple-delphi/",
-        "description": "Archaeologists working near Delphi have unearthed a beautifully preserved temple structure containing valuable bronze artifacts and intact inscriptions dedicated to Apollo.",
-        "source": "Greek News Agenda",
-        "pubDate": "Sat, 01 Aug 2026 14:00:00 GMT",
-        "location": "Delphi",
-        "coords": [38.4801, 22.5010],
-        "category": "Culture & Heritage"
-    },
-    {
-        "title": "Record Nesting Season for Loggerhead Sea Turtles in Zakynthos Marine Park",
-        "link": "https://greekreporter.com/2026/07/20/sea-turtles-zakynthos-greece/",
-        "description": "Conservationists report a record-breaking number of Caretta caretta sea turtle nests on the beaches of Zakynthos, citing successful eco-management and volunteer patrols.",
-        "source": "eKathimerini",
-        "pubDate": "Fri, 31 Jul 2026 10:30:00 GMT",
-        "location": "Zakynthos",
-        "coords": [37.7870, 20.8999],
-        "category": "Environment & Nature"
-    },
-    {
-        "title": "Greek Student Team Wins Gold Medal at International Robotics Olympiad",
-        "link": "https://greekreporter.com/2026/07/15/greek-students-robotics-gold/",
-        "description": "A brilliant team of high school students from Thessaloniki has won first place at the Robotics Olympiad, showcasing their autonomous rescue drone prototype.",
-        "source": "Greek Reporter",
-        "pubDate": "Thu, 30 Jul 2026 18:20:00 GMT",
-        "location": "Thessaloniki",
-        "coords": [40.6401, 22.9444],
-        "category": "Innovation & Tech"
-    },
-    {
-        "title": "Crete Farmers Win Top Honors at International Organic Olive Oil Awards",
-        "link": "https://greekreporter.com/2026/06/18/crete-organic-olive-oil-gold/",
-        "description": "An agricultural cooperative in Chania, Crete has taken home three gold medals for its ultra-premium extra virgin olive oil, highlighting sustainable farming techniques.",
-        "source": "Greek Reporter",
-        "pubDate": "Wed, 29 Jul 2026 11:45:00 GMT",
-        "location": "Crete",
-        "coords": [35.3387, 25.1442],
-        "category": "Sports & Success"
-    },
-    {
-        "title": "Athens Named Top Cultural Destination in Europe for 2026",
-        "link": "https://greekreporter.com/2026/05/20/athens-top-destination-europe/",
-        "description": "The World Travel Awards has crowned Athens as the leading cultural city destination, praising its pedestrian-friendly historic path and world-class museums.",
-        "source": "Greek Reporter",
-        "pubDate": "Tue, 28 Jul 2026 08:15:00 GMT",
-        "location": "Athens",
-        "coords": [37.9838, 23.7275],
-        "category": "Tourism & Travel"
-    },
-    {
-        "title": "Volunteers Plant 1,200 Native Trees on Mount Hymettus to Restore Forest",
-        "link": "https://greekreporter.com/2026/04/12/volunteer-reforestation-athens/",
-        "description": "Over five hundred volunteers joined local environmental groups in Athens to plant native pine and oak saplings in a major effort to restore fire-impacted regions.",
-        "source": "eKathimerini",
-        "pubDate": "Mon, 27 Jul 2026 16:30:00 GMT",
-        "location": "Athens",
-        "coords": [37.9838, 23.7275],
-        "category": "Society & Solidarity"
-    },
-    {
-        "title": "Rhodes Implements Zero-Waste Island Program to Eliminate Single-Use Plastics",
-        "link": "https://greekreporter.com/2026/03/10/rhodes-zero-waste-island/",
-        "description": "Rhodes has launched a comprehensive waste reduction plan in partnership with local businesses, offering recycled beach accessories and paper-only alternatives.",
-        "source": "eKathimerini",
-        "pubDate": "Sun, 26 Jul 2026 12:00:00 GMT",
-        "location": "Rhodes",
-        "coords": [36.4341, 28.2176],
-        "category": "Environment & Nature"
-    },
-    {
-        "title": "New High-Speed Train Link Connects Patras to Athens in Under Two Hours",
-        "link": "https://greekreporter.com/2026/02/15/athens-patras-railway/",
-        "description": "The completion of the state-of-the-art double-track electric railway has officially reduced travel time, promoting eco-friendly public transport in Western Greece.",
-        "source": "eKathimerini",
-        "pubDate": "Sat, 25 Jul 2026 09:30:00 GMT",
-        "location": "Patras",
-        "coords": [38.2466, 21.7346],
-        "category": "Innovation & Tech"
-    },
-    {
-        "title": "Ancient Sunken Harbor of Milos Mapped in High-Definition 3D by Marine Archaeologists",
-        "link": "https://greekreporter.com/2026/01/22/sunken-harbor-milos-3d/",
-        "description": "Using advanced sonar and underwater lasers, scientists have generated the first complete 3D digital model of the Roman-era harbor submerged off the island of Milos.",
-        "source": "Greek News Agenda",
-        "pubDate": "Fri, 24 Jul 2026 15:40:00 GMT",
-        "location": "Milos",
-        "coords": [36.7294, 24.4286],
-        "category": "Culture & Heritage"
-    }
-]
+def get_seeded_news():
+    now = datetime.datetime.now(datetime.timezone.utc)
+    
+    def rel_date(days_ago, hour, minute):
+        d = now - datetime.timedelta(days=days_ago)
+        d = d.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        return d.strftime("%a, %d %b %Y %H:%M:%S GMT")
+        
+    return [
+        {
+            "title": "Greece Runs Entirely on 100% Clean Energy for the First Time in History",
+            "link": "https://greekreporter.com/2022/10/11/greece-runs-100-percent-clean-energy-first-time/",
+            "description": "Greece reached a historic milestone as the country's electricity grid ran entirely on renewable energy for several hours, showing the success of solar and wind investment.",
+            "source": "Greek Reporter",
+            "pubDate": rel_date(0, 9, 0),
+            "location": "Peloponnese",
+            "coords": [37.4856, 22.3653],
+            "category": "Environment & Nature"
+        },
+        {
+            "title": "Remarkable 2,500-Year-Old Temple Discovered Unspoiled in Ancient Delphi",
+            "link": "https://greekreporter.com/2025/08/12/ancient-greek-temple-delphi/",
+            "description": "Archaeologists working near Delphi have unearthed a beautifully preserved temple structure containing valuable bronze artifacts and intact inscriptions dedicated to Apollo.",
+            "source": "Greek News Agenda",
+            "pubDate": rel_date(1, 14, 0),
+            "location": "Delphi",
+            "coords": [38.4801, 22.5010],
+            "category": "Culture & Heritage"
+        },
+        {
+            "title": "Record Nesting Season for Loggerhead Sea Turtles in Zakynthos Marine Park",
+            "link": "https://greekreporter.com/2026/07/20/sea-turtles-zakynthos-greece/",
+            "description": "Conservationists report a record-breaking number of Caretta caretta sea turtle nests on the beaches of Zakynthos, citing successful eco-management and volunteer patrols.",
+            "source": "eKathimerini",
+            "pubDate": rel_date(2, 10, 30),
+            "location": "Zakynthos",
+            "coords": [37.7870, 20.8999],
+            "category": "Environment & Nature"
+        },
+        {
+            "title": "Greek Student Team Wins Gold Medal at International Robotics Olympiad",
+            "link": "https://greekreporter.com/2026/07/15/greek-students-robotics-gold/",
+            "description": "A brilliant team of high school students from Thessaloniki has won first place at the Robotics Olympiad, showcasing their autonomous rescue drone prototype.",
+            "source": "Greek Reporter",
+            "pubDate": rel_date(3, 18, 20),
+            "location": "Thessaloniki",
+            "coords": [40.6401, 22.9444],
+            "category": "Innovation & Tech"
+        },
+        {
+            "title": "Crete Farmers Win Top Honors at International Organic Olive Oil Awards",
+            "link": "https://greekreporter.com/2026/06/18/crete-organic-olive-oil-gold/",
+            "description": "An agricultural cooperative in Chania, Crete has taken home three gold medals for its ultra-premium extra virgin olive oil, highlighting sustainable farming techniques.",
+            "source": "Greek Reporter",
+            "pubDate": rel_date(4, 11, 45),
+            "location": "Crete",
+            "coords": [35.3387, 25.1442],
+            "category": "Sports & Success"
+        },
+        {
+            "title": "Athens Named Top Cultural Destination in Europe for 2026",
+            "link": "https://greekreporter.com/2026/05/20/athens-top-destination-europe/",
+            "description": "The World Travel Awards has crowned Athens as the leading cultural city destination, praising its pedestrian-friendly historic path and world-class museums.",
+            "source": "Greek Reporter",
+            "pubDate": rel_date(5, 8, 15),
+            "location": "Athens",
+            "coords": [37.9838, 23.7275],
+            "category": "Tourism & Travel"
+        },
+        {
+            "title": "Volunteers Plant 1,200 Native Trees on Mount Hymettus to Restore Forest",
+            "link": "https://greekreporter.com/2026/04/12/volunteer-reforestation-athens/",
+            "description": "Over five hundred volunteers joined local environmental groups in Athens to plant native pine and oak saplings in a major effort to restore fire-impacted regions.",
+            "source": "eKathimerini",
+            "pubDate": rel_date(6, 16, 30),
+            "location": "Athens",
+            "coords": [37.9838, 23.7275],
+            "category": "Society & Solidarity"
+        },
+        {
+            "title": "Rhodes Implements Zero-Waste Island Program to Eliminate Single-Use Plastics",
+            "link": "https://greekreporter.com/2026/03/10/rhodes-zero-waste-island/",
+            "description": "Rhodes has launched a comprehensive waste reduction plan in partnership with local businesses, offering recycled beach accessories and paper-only alternatives.",
+            "source": "eKathimerini",
+            "pubDate": rel_date(7, 12, 0),
+            "location": "Rhodes",
+            "coords": [36.4341, 28.2176],
+            "category": "Environment & Nature"
+        },
+        {
+            "title": "New High-Speed Train Link Connects Patras to Athens in Under Two Hours",
+            "link": "https://greekreporter.com/2026/02/15/athens-patras-railway/",
+            "description": "The completion of the state-of-the-art double-track electric railway has officially reduced travel time, promoting eco-friendly public transport in Western Greece.",
+            "source": "eKathimerini",
+            "pubDate": rel_date(8, 9, 30),
+            "location": "Patras",
+            "coords": [38.2466, 21.7346],
+            "category": "Innovation & Tech"
+        },
+        {
+            "title": "Ancient Sunken Harbor of Milos Mapped in High-Definition 3D by Marine Archaeologists",
+            "link": "https://greekreporter.com/2026/01/22/sunken-harbor-milos-3d/",
+            "description": "Using advanced sonar and underwater lasers, scientists have generated the first complete 3D digital model of the Roman-era harbor submerged off the island of Milos.",
+            "source": "Greek News Agenda",
+            "pubDate": rel_date(9, 15, 40),
+            "location": "Milos",
+            "coords": [36.7294, 24.4286],
+            "category": "Culture & Heritage"
+        }
+    ]
 
 def extract_location_and_coords(text):
     text_lower = text.lower()
     for loc, coords in REGIONS.items():
         if loc.lower() in text_lower:
             return loc, coords
-    # Default to Athens/Greece center if not specified
     return "Greece", [39.0742, 21.8243]
 
 def determine_category(text):
     text_lower = text.lower()
-    if any(w in text_lower for w in ["archaeology", "ancient", "history", "museum", "culture", "art", "festival", "music", "cinema"]):
-        return "Culture & Heritage"
-    elif any(w in text_lower for w in ["tourism", "tourist", "travel", "beach", "hotel", "island", "visit"]):
-        return "Tourism & Travel"
-    elif any(w in text_lower for w in ["tech", "startup", "innovate", "innovation", "science", "robotics", "digital", "research"]):
-        return "Innovation & Tech"
-    elif any(w in text_lower for w in ["green", "renewable", "solar", "wind", "conservation", "wildlife", "turtle", "forest", "clean", "ecology"]):
-        return "Environment & Nature"
-    elif any(w in text_lower for w in ["help", "volunteer", "solidarity", "donation", "community", "kindness", "support", "hero"]):
-        return "Society & Solidarity"
-    elif any(w in text_lower for w in ["medal", "win", "champion", "olympic", "sports", "athlete", "football", "basketball"]):
-        return "Sports & Success"
+    categories = {
+        "Culture & Heritage": ["archaeology", "archaeologist", "archaeological", "ancient", "history", "museum", "culture", "cultural", "art", "arts", "artist", "artists", "festival", "festivals", "music", "cinema"],
+        "Tourism & Travel": ["tourism", "tourist", "tourists", "travel", "beach", "beaches", "hotel", "hotels", "island", "islands", "visit"],
+        "Innovation & Tech": ["tech", "technology", "technologies", "startup", "startups", "innovate", "innovation", "innovations", "innovative", "science", "robotics", "digital", "research"],
+        "Environment & Nature": ["green", "renewable", "renewables", "solar", "wind", "conservation", "wildlife", "turtle", "turtles", "forest", "forests", "clean", "ecology", "ecological"],
+        "Society & Solidarity": ["help", "helps", "helping", "helped", "volunteer", "volunteers", "volunteering", "solidarity", "donation", "donations", "donate", "donated", "community", "communities", "kindness", "support", "hero", "heroes"],
+        "Sports & Success": ["medal", "medals", "win", "wins", "winning", "won", "champion", "champions", "olympic", "olympics", "sports", "athlete", "athletes", "football", "basketball"]
+    }
+    
+    for category, keywords in categories.items():
+        pattern = r'\b(' + '|'.join(re.escape(k) for k in keywords) + r')\b'
+        if re.search(pattern, text_lower):
+            return category
+            
     return "General Positive"
 
 def fetch_external_news():
@@ -204,7 +304,7 @@ def fetch_external_news():
     for source_name, url in feeds:
         try:
             req = urllib.request.Request(url, headers=headers)
-            with urllib.request.urlopen(req, timeout=5) as response:
+            with urllib.request.urlopen(req, timeout=8) as response:
                 xml_data = response.read()
                 root = ET.fromstring(xml_data)
                 
@@ -225,20 +325,15 @@ def fetch_external_news():
                     pub_date = item.find('pubDate')
                     pub_date_text = pub_date.text if pub_date is not None else ""
                     
-                    # Clean HTML tags
-                    clean_desc = re.sub('<[^<]+?>', '', desc_text).strip()
+                    # Clean HTML tags and unescape HTML/XML entities
+                    clean_desc = html.unescape(re.sub('<[^<]+?>', '', desc_text).strip())
                     
-                    # Sentiment filter
-                    title_lower = title_text.lower()
-                    desc_lower = clean_desc.lower()
+                    # Sentiment filter using regular expressions with word boundary matching
+                    has_negative = bool(NEGATIVE_REGEX.search(title_text) or NEGATIVE_REGEX.search(clean_desc))
+                    has_positive = bool(POSITIVE_REGEX.search(title_text) or POSITIVE_REGEX.search(clean_desc))
                     
-                    # Check negative keywords first
-                    has_negative = any(neg in title_lower or neg in desc_lower for neg in NEGATIVE_KEYWORDS)
                     if has_negative:
                         continue
-                        
-                    # Check positive keywords
-                    has_positive = any(pos in title_lower or pos in desc_lower for pos in POSITIVE_KEYWORDS)
                     if not has_positive:
                         continue
                         
@@ -253,16 +348,81 @@ def fetch_external_news():
                         "pubDate": pub_date_text,
                         "location": loc,
                         "coords": coords,
-                        "category": determine_category(title_lower + " " + desc_lower)
+                        "category": determine_category(title_text + " " + clean_desc)
                     })
         except Exception as e:
             print(f"Error fetching/parsing {source_name}: {e}")
             
     return parsed_items
 
+# Background Cache Management Setup
+news_cache = []
+cache_lock = threading.Lock()
+
+def load_cached_news():
+    global news_cache
+    if os.path.exists(CACHE_FILE):
+        try:
+            with open(CACHE_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    with cache_lock:
+                        news_cache = data
+                    print(f"Loaded {len(news_cache)} news stories from cache file.")
+                    return
+        except Exception as e:
+            print(f"Error loading news cache file: {e}")
+            
+    # Fallback if cache file does not exist, is empty, or fails to load
+    with cache_lock:
+        news_cache = get_seeded_news()
+    print("Initialized news cache with fallback seeded news.")
+
+def save_cached_news(news_list):
+    try:
+        with open(CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump(news_list, f, ensure_ascii=False, indent=2)
+        print("Successfully saved news cache to file.")
+    except Exception as e:
+        print(f"Error saving news cache to file: {e}")
+
+def update_news():
+    print("Initiating background news update...")
+    dynamic_news = fetch_external_news()
+    seed_news = get_seeded_news()
+    
+    seen_titles = set()
+    merged_news = []
+    
+    # First insert dynamic feeds, then add seeded fallback stories
+    for item in dynamic_news + seed_news:
+        title_normalized = item["title"].strip().lower()
+        if title_normalized not in seen_titles:
+            seen_titles.add(title_normalized)
+            merged_news.append(item)
+            
+    with cache_lock:
+        global news_cache
+        news_cache = merged_news
+        
+    save_cached_news(merged_news)
+    print(f"News update completed. {len(merged_news)} stories in cache.")
+
+def news_updater_loop():
+    # Keep running in a daemon thread
+    while True:
+        try:
+            update_news()
+            # If successful, wait 60 minutes (3600 seconds)
+            sleep_time = 3600
+        except Exception as e:
+            print(f"Error in background news updater: {e}")
+            # If failed, retry in 5 minutes (300 seconds)
+            sleep_time = 300
+        time.sleep(sleep_time)
+
 class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def translate_path(self, path):
-        # Prevent accessing files outside of the PUBLIC_DIR unless it's explicitly allowed
         parsed = urlparse(path)
         rel_path = parsed.path.lstrip('/')
         if not rel_path or rel_path == 'index.html':
@@ -273,40 +433,33 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
         parsed_url = urlparse(self.path)
         
         if parsed_url.path == '/api/news':
-            # Set CORS headers
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
             
-            # Fetch dynamic news and combine with seed data
-            dynamic_news = fetch_external_news()
-            
-            # Merge lists, removing duplicates based on title
-            seen_titles = set()
-            merged_news = []
-            
-            # First insert dynamic feeds, then add seeded fallback stories
-            for item in dynamic_news + SEED_NEWS:
-                title_normalized = item["title"].strip().lower()
-                if title_normalized not in seen_titles:
-                    seen_titles.add(title_normalized)
-                    merged_news.append(item)
-            
-            # Respond with JSON payload
-            self.wfile.write(json.dumps(merged_news).encode('utf-8'))
+            # Instantly return cached news from memory
+            with cache_lock:
+                current_news = list(news_cache)
+                
+            self.wfile.write(json.dumps(current_news).encode('utf-8'))
             return
             
-        # Fallback to serving static files from public directory
         super().do_GET()
 
-    # Prevent logs from polluting console output excessively
     def log_message(self, format, *args):
         pass
 
 if __name__ == '__main__':
     # Ensure public folder exists
     os.makedirs(PUBLIC_DIR, exist_ok=True)
+    
+    # Load cache or seeded news immediately
+    load_cached_news()
+    
+    # Start the background news updater thread
+    updater_thread = threading.Thread(target=news_updater_loop, daemon=True)
+    updater_thread.start()
     
     # Start web server
     with socketserver.ThreadingTCPServer(("", PORT), CustomHTTPRequestHandler) as httpd:
