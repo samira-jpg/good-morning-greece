@@ -307,7 +307,7 @@ if __name__ == '__main__':
     os.makedirs(PUBLIC_DIR, exist_ok=True)
     
     # Start web server
-    with socketserver.TCPServer(("", PORT), CustomHTTPRequestHandler) as httpd:
+    with socketserver.ThreadingTCPServer(("", PORT), CustomHTTPRequestHandler) as httpd:
         print(f"Good Morning Greece! Server running at http://localhost:{PORT}")
         try:
             httpd.serve_forever()
