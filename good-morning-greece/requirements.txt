@@ -1,2 +1,0 @@
-# No external python dependencies required.
-# The server runs entirely on Python standard library modules (http.server, urllib, xml, json).
