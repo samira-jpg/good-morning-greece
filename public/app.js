@@ -321,7 +321,7 @@ function renderNews() {
     // Apply category & search query filters
     const filteredNews = newsData.filter(item => {
         const matchesCategory = activeCategory === 'all' || item.category === activeCategory;
-        const searchString = `${item.title} ${item.description} ${item.location} ${item.source}`.toLowerCase();
+        const searchString = `${item.title} ${item.description} ${item.location} ${item.source} ${item.originalTitle || ''} ${item.originalDescription || ''}`.toLowerCase();
         const matchesSearch = searchString.includes(searchQuery.toLowerCase());
         return matchesCategory && matchesSearch;
     });
@@ -359,6 +359,7 @@ function renderNews() {
                 <span class="card-source">${item.source}</span>
             </div>
             <h3>${item.title}</h3>
+            ${item.originalTitle ? `<p class="card-original-title"><i class="fa-solid fa-language"></i> ${item.originalTitle}</p>` : ''}
             <p>${item.description}</p>
             <div class="card-bottom-meta">
                 <span class="card-location"><i class="fa-solid fa-location-dot"></i> ${item.location}</span>

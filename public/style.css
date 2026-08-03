@@ -847,6 +847,13 @@ body {
     margin-top: 8px;
 }
 
+.card-original-title {
+    font-style: italic;
+    font-size: 11px !important;
+    color: var(--color-text-muted);
+    opacity: 0.85;
+}
+
 /* Footer Running Positivity Ticker */
 .app-footer {
     height: 40px;

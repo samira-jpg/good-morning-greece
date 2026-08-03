@@ -232,14 +232,24 @@ def generate_daily_news():
 # couple of direct feeds. Real article links come straight from the feed (Google News
 # links redirect to the original publisher article).
 RSS_FEEDS = [
-    ("Google News", "https://news.google.com/rss/search?q=Greece+(culture+OR+heritage+OR+archaeology+OR+museum)+when:5d&hl=en-US&gl=US&ceid=US:en"),
-    ("Google News", "https://news.google.com/rss/search?q=Greece+(tourism+OR+travel+OR+island)+when:5d&hl=en-US&gl=US&ceid=US:en"),
-    ("Google News", "https://news.google.com/rss/search?q=Greece+(innovation+OR+startup+OR+technology+OR+research)+when:5d&hl=en-US&gl=US&ceid=US:en"),
-    ("Google News", "https://news.google.com/rss/search?q=Greece+(renewable+OR+environment+OR+conservation+OR+wildlife)+when:5d&hl=en-US&gl=US&ceid=US:en"),
-    ("Google News", "https://news.google.com/rss/search?q=Greece+(award+OR+championship+OR+medal+OR+wins)+when:5d&hl=en-US&gl=US&ceid=US:en"),
-    ("Google News", "https://news.google.com/rss/search?q=Greece+(charity+OR+volunteer+OR+community)+when:5d&hl=en-US&gl=US&ceid=US:en"),
-    ("Keep Talking Greece", "https://www.keeptalkinggreece.com/feed/"),
+    ("Google News", "https://news.google.com/rss/search?q=Greece+(culture+OR+heritage+OR+archaeology+OR+museum)+when:5d&hl=en-US&gl=US&ceid=US:en", "en"),
+    ("Google News", "https://news.google.com/rss/search?q=Greece+(tourism+OR+travel+OR+island)+when:5d&hl=en-US&gl=US&ceid=US:en", "en"),
+    ("Google News", "https://news.google.com/rss/search?q=Greece+(innovation+OR+startup+OR+technology+OR+research)+when:5d&hl=en-US&gl=US&ceid=US:en", "en"),
+    ("Google News", "https://news.google.com/rss/search?q=Greece+(renewable+OR+environment+OR+conservation+OR+wildlife)+when:5d&hl=en-US&gl=US&ceid=US:en", "en"),
+    ("Google News", "https://news.google.com/rss/search?q=Greece+(award+OR+championship+OR+medal+OR+wins)+when:5d&hl=en-US&gl=US&ceid=US:en", "en"),
+    ("Google News", "https://news.google.com/rss/search?q=Greece+(charity+OR+volunteer+OR+community)+when:5d&hl=en-US&gl=US&ceid=US:en", "en"),
+    ("Keep Talking Greece", "https://www.keeptalkinggreece.com/feed/", "en"),
 ]
+
+# Greek-language search queries: fetched in Greek, translated to English for display and
+# keyword filtering, with the original Greek text kept alongside so users can search in Greek too.
+GREEK_QUERIES = [
+    "Ελλάδα (πολιτισμός OR αρχαιολογία OR μουσείο) when:5d",
+    "Ελλάδα (τουρισμός OR καινοτομία OR τεχνολογία) when:5d",
+    "Ελλάδα (βραβείο OR πρωτάθλημα OR εθελοντές) when:5d",
+]
+for _q in GREEK_QUERIES:
+    RSS_FEEDS.append(("Google News", f"https://news.google.com/rss/search?q={quote_plus(_q)}&hl=el&gl=GR&ceid=GR:el", "el"))
 
 # Keywords that disqualify a story from the "good news" feed
 NEGATIVE_KEYWORDS = [
@@ -303,6 +313,24 @@ def is_positive_story(text):
     lower = text.lower()
     return not any(neg in lower for neg in NEGATIVE_KEYWORDS)
 
+def translate_to_english(text, source_lang="el"):
+    """Best-effort translation via Google's public translate endpoint. Falls back to the
+    original text on any failure so a translation hiccup never drops a whole story."""
+    if not text:
+        return text
+    try:
+        url = (
+            "https://translate.googleapis.com/translate_a/single"
+            f"?client=gtx&sl={source_lang}&tl=en&dt=t&q={quote_plus(text)}"
+        )
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=8) as response:
+            data = json.loads(response.read().decode('utf-8'))
+            return ''.join(segment[0] for segment in data[0] if segment[0])
+    except Exception as e:
+        print(f"Translation failed, using original text: {e}")
+        return text
+
 def parse_rss_date(date_str):
     if not date_str:
         return None
@@ -319,7 +347,7 @@ def fetch_positive_rss_news():
     }
 
     collected = []
-    for source_name, url in RSS_FEEDS:
+    for source_name, url, feed_lang in RSS_FEEDS:
         try:
             req = urllib.request.Request(url, headers=headers)
             with urllib.request.urlopen(req, timeout=10) as response:
@@ -353,6 +381,14 @@ def fetch_positive_rss_news():
                     if not clean_desc:
                         clean_desc = title_text
 
+                    # Greek-language items get translated for filtering/display; the original
+                    # Greek stays around so a Greek search term can still match the story.
+                    original_title, original_desc = None, None
+                    if feed_lang != "en":
+                        original_title, original_desc = title_text, clean_desc
+                        title_text = translate_to_english(title_text, feed_lang)
+                        clean_desc = translate_to_english(clean_desc, feed_lang)
+
                     combined_text = f"{title_text} {clean_desc}"
                     if not is_positive_story(combined_text):
                         continue
@@ -377,6 +413,8 @@ def fetch_positive_rss_news():
                         "coords": coords,
                         "category": category,
                         "pubDate": pub_dt.strftime("%a, %d %b %Y %H:%M:%S GMT"),
+                        "originalTitle": original_title,
+                        "originalDescription": original_desc[:320] if original_desc else None,
                         "_sort_dt": pub_dt.timestamp() if pub_dt.tzinfo else pub_dt.replace(tzinfo=datetime.timezone.utc).timestamp(),
                     })
         except Exception as e:
