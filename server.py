@@ -12,7 +12,7 @@ import re
 import html
 from urllib.parse import urlparse, quote_plus
 
-PORT = 8000
+PORT = int(os.environ.get("PORT", 8000))
 PUBLIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'public')
 CACHE_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'news_cache.json')
 
