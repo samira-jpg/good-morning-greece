@@ -46,8 +46,8 @@ const WISDOM_QUOTES = [
     }
 ];
 
-// 2. Ticker Feeds Seed Data
-const TICKER_ITEMS = [
+// 2. Ticker Feeds Fallback Seed Data (used only if news hasn't loaded yet)
+const TICKER_FALLBACK_ITEMS = [
     "Crete: Local community raises €15,000 for children's hospital wing.",
     "Patras: Youth volunteer group cleans and restores 3km of coastal cycling paths.",
     "Naxos: Organic potato harvest exceeds expectations, securing local agricultural jobs.",
@@ -271,11 +271,13 @@ function getWeatherCodeDetails(code) {
 }
 
 // 9. Scrolling Positivity Ticker Component
-function initTicker() {
+function initTicker(items) {
     const tickerEl = document.getElementById("positivity-ticker");
     tickerEl.innerHTML = "";
-    
-    TICKER_ITEMS.forEach(text => {
+
+    const tickerItems = (items && items.length > 0) ? items : TICKER_FALLBACK_ITEMS;
+
+    tickerItems.forEach(text => {
         const itemSpan = document.createElement("span");
         itemSpan.className = "ticker-item";
         itemSpan.textContent = text;
@@ -291,9 +293,10 @@ async function fetchNews() {
     try {
         const response = await fetch('/api/news');
         newsData = await response.json();
-        
+
         renderNews();
         updateOptimismIndex(newsData);
+        initTicker(newsData.map(item => `${item.location}: ${item.title}`));
     } catch (error) {
         console.error("Error fetching news:", error);
         feedContainer.innerHTML = `
@@ -361,10 +364,12 @@ function renderNews() {
                 <span class="card-location"><i class="fa-solid fa-location-dot"></i> ${item.location}</span>
                 <span>${formatDate(item.pubDate)}</span>
             </div>
+            <a href="${item.link}" target="_blank" rel="noopener" class="hero-link card-read-link">Read Full <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
         `;
 
-        // Card Click Handler
-        card.addEventListener("click", () => {
+        // Card Click Handler: pan/select on the card body, but let the "Read Full" link behave normally
+        card.addEventListener("click", (e) => {
+            if (e.target.closest(".card-read-link")) return;
             selectNewsItem(item, card);
         });
 

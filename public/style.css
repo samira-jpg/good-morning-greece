@@ -843,6 +843,10 @@ body {
     color: var(--color-aegean-blue);
 }
 
+.card-read-link {
+    margin-top: 8px;
+}
+
 /* Footer Running Positivity Ticker */
 .app-footer {
     height: 40px;
