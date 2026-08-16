@@ -262,6 +262,11 @@ NEGATIVE_KEYWORDS = [
     "arms sales", "human rights", "missing", "warship", "massacre", "alarm",
     "smuggl", "illegal", "detain", "tension", "dispute", "controversy", "suicide",
     "body found", "suspect", "trial", "court", "sentenced", "jail", "prison",
+    "steal", "stole", "stolen", "theft", "robbed", "robbery", "looted", "looting",
+    "vandal", "burglar", "burglary", "heist", "hostage", "kidnap", "explosion",
+    "wildfire", "damaged", "destroyed", "closure", "shut down", "layoff", "bankrupt",
+    "nightmare", "harrowing", "seasick", "chaos", "stranded", "delay", "cancel",
+    "warning", "danger", "emergency", "outbreak", "sick", "illness", "hospital",
 ]
 
 # Keyword -> category mapping, checked in order against title+description
@@ -301,6 +306,80 @@ def categorize(text):
         if any(k in lower for k in keywords):
             return category
     return None
+
+VALID_CATEGORIES = [c for c, _ in CATEGORY_KEYWORDS]
+
+def llm_filter_positive_stories(entries):
+    """Second-pass sentiment check via Claude: the keyword filter above only excludes
+    known-bad topics, so it misses nuance (e.g. a crime story about an otherwise
+    positive-sounding place). Confirms each keyword-passed story is genuinely positive
+    news and re-checks its category. Falls back to the keyword-only result if no
+    ANTHROPIC_API_KEY is configured or the API call fails."""
+    if not entries:
+        return entries
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        return entries
+
+    try:
+        import anthropic
+        client = anthropic.Anthropic(api_key=api_key)
+
+        stories_text = "\n".join(
+            f"{i}. [{e['category']}] {e['title']} — {e['description']}"
+            for i, e in enumerate(entries)
+        )
+
+        response = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=4096,
+            system=(
+                "You review a feed of Greek/Greece-related news stories that have already passed a "
+                "keyword filter. For each numbered story, decide if it is genuinely positive, uplifting, "
+                "or good news (not merely neutral, and not negative news that happens to mention a "
+                "positive-sounding topic like a museum, a school, or a tourist site). Also confirm or "
+                "correct its category."
+            ),
+            output_config={"format": {
+                "type": "json_schema",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "results": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "index": {"type": "integer"},
+                                    "is_positive": {"type": "boolean"},
+                                    "category": {"type": "string", "enum": VALID_CATEGORIES},
+                                },
+                                "required": ["index", "is_positive", "category"],
+                                "additionalProperties": False,
+                            },
+                        },
+                    },
+                    "required": ["results"],
+                    "additionalProperties": False,
+                },
+            }},
+            messages=[{"role": "user", "content": stories_text}],
+        )
+
+        text_block = next(b.text for b in response.content if b.type == "text")
+        verdicts = {r["index"]: r for r in json.loads(text_block)["results"]}
+
+        filtered = []
+        for i, entry in enumerate(entries):
+            verdict = verdicts.get(i)
+            if verdict is None or not verdict["is_positive"]:
+                continue
+            entry["category"] = verdict["category"]
+            filtered.append(entry)
+        return filtered
+    except Exception as e:
+        print(f"LLM sentiment filter failed, using keyword-only filtering: {e}")
+        return entries
 
 def locate(text):
     lower = text.lower()
@@ -433,7 +512,7 @@ def fetch_positive_rss_news():
         if len(deduped) >= 15:
             break
 
-    return deduped
+    return llm_filter_positive_stories(deduped)
 
 # Background Cache Management Setup
 news_cache = []

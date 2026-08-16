@@ -1,2 +1,4 @@
-# No external python dependencies required.
-# The server runs entirely on Python standard library modules (http.server, urllib, xml, json).
+# The server runs on the Python standard library (http.server, urllib, xml, json)
+# plus the Anthropic SDK, used for an optional LLM-based positive-news sentiment check.
+# If ANTHROPIC_API_KEY is not set, the app falls back to keyword-only filtering.
+anthropic
