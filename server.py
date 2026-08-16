@@ -297,7 +297,7 @@ LOCATION_COORDS = {
     "peloponnese": [37.4856, 22.3653], "meteora": [39.7217, 21.6303], "olympus": [40.0855, 22.3585],
     "aegean": [37.8, 25.5], "ionian": [38.5, 20.5],
 }
-DEFAULT_COORDS = [39.0742, 21.8243]
+DEFAULT_COORDS = LOCATION_COORDS["athens"]  # nationwide stories pin at the capital instead of a bare geometric center
 
 def categorize(text):
     """Returns the matched category, or None if nothing indicates a positive story."""

@@ -376,8 +376,9 @@ function renderNews() {
 
         feedContainer.appendChild(card);
 
-        // Add Marker on map if coordinate is valid and not generic center of Greece
-        if (item.coords && item.coords.length === 2 && !(item.coords[0] === 39.0742 && item.coords[1] === 21.8243)) {
+        // Add a marker for every story with valid coordinates, including nationwide
+        // stories that fall back to the Athens pin (no specific city was mentioned).
+        if (item.coords && item.coords.length === 2) {
             addMapMarker(item, index, card);
         }
     });
