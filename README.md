@@ -3,8 +3,8 @@
 An interactive, light-themed positive news and optimism dashboard focused on Greece. Styled with the colors of the Greek flag (Aegean blues and white) and warm gold accents.
 
 ## 🌟 Features
-*   **Interactive Positivity Map**: Pulsing hotspots mapping positive events across Greece (Athens, Crete, Thessaloniki, Rhodes, Zakynthos, Delphi, Milos, and more).
-*   **Curated News Scraper**: Combines live English-language feeds from *Greek Reporter* and *eKathimerini*, filtering out negative sentiment and stories.
+*   **Interactive Positivity Map**: One pin per place mentioned in the news (with a count when several stories share a place). Click a card to fly to its pin; click a pin to highlight its stories in the feed. Nationwide stories with no specific place are listed but not pinned.
+*   **Curated News Scraper**: Pulls the last 3–4 days of English and Greek (auto-translated) stories from Google News, Greek Reporter and Keep Talking Greece every hour, filters out negative stories with whole-word keyword matching (plus an optional Claude check when `ANTHROPIC_API_KEY` is set), and merges near-duplicate headlines. If the feeds can't be reached, the last real batch is shown with an "Updated X ago" label — no placeholder stories are ever invented.
 *   **Greece Optimism Index**: An animated radial dial displaying a daily positivity score based on active stories and weather conditions.
 *   **Sunshine & Weather Tracker**: Live weather conditions and sunshine statistics for major Greek cities via the Open-Meteo API.
 *   **Ancient Wisdom Widget**: Rotating quotes from ancient Greek philosophers (Socrates, Plato, Aristotle, Epicurus, Democritus) in Greek script, phonetics, and English translation.

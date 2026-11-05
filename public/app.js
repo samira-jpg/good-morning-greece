@@ -286,15 +286,32 @@ function initTicker(items) {
 }
 
 // 10. Fetch & Aggregate Good News Component
+let newsUpdatedAt = null;
+let hasFittedMap = false;
+
 async function fetchNews() {
     const feedContainer = document.getElementById("news-feed");
-    const countEl = document.getElementById("news-count");
-    
+
     try {
-        const response = await fetch('/api/news');
-        newsData = await response.json();
+        const response = await fetch('/api/news', { cache: 'no-store' });
+        const payload = await response.json();
+        // Older servers returned a bare list; newer ones return { updatedAt, stories }.
+        newsData = Array.isArray(payload) ? payload : (payload.stories || []);
+        newsUpdatedAt = Array.isArray(payload) ? null : payload.updatedAt;
+
+        // The server fetches in the background on startup; poll until the first batch lands.
+        if (newsData.length === 0) {
+            feedContainer.innerHTML = `
+                <div class="feed-loader">
+                    <div class="spinner"></div>
+                    <p>Gathering today's good news from across Greece...</p>
+                </div>`;
+            setTimeout(fetchNews, 5000);
+            return;
+        }
 
         renderNews();
+        renderUpdatedLabel();
         updateOptimismIndex(newsData);
         initTicker(newsData.map(item => `${item.location}: ${item.title}`));
     } catch (error) {
@@ -309,16 +326,39 @@ async function fetchNews() {
     }
 }
 
+// Re-check for fresh stories every 15 minutes while the page stays open.
+setInterval(() => { if (newsData.length) fetchNews(); }, 15 * 60 * 1000);
+
+function renderUpdatedLabel() {
+    const el = document.getElementById("news-updated");
+    if (!el) return;
+    if (!newsUpdatedAt) { el.textContent = ""; return; }
+    const ageMs = Date.now() - new Date(newsUpdatedAt).getTime();
+    el.textContent = `Updated ${timeAgo(newsUpdatedAt)}`;
+    el.classList.toggle("stale", ageMs > 6 * 3600 * 1000);
+    el.title = ageMs > 6 * 3600 * 1000
+        ? "The news sources couldn't be reached recently, so these are the last stories we fetched."
+        : new Date(newsUpdatedAt).toLocaleString("en-GB", { timeZone: "Europe/Athens" });
+}
+setInterval(renderUpdatedLabel, 60 * 1000);
+
+function categoryTagClass(category) {
+    if (category.includes("Nature")) return "nature";
+    if (category.includes("Tech")) return "tech";
+    if (category.includes("Solidarity")) return "solidarity";
+    if (category.includes("Success")) return "sports";
+    if (category.includes("Tourism")) return "tourism";
+    return "culture";
+}
+
 // Render filtered news items in list and map markers
 function renderNews() {
     const feedContainer = document.getElementById("news-feed");
     const countEl = document.getElementById("news-count");
-    
-    // Clear current lists and markers
+
     feedContainer.innerHTML = "";
     clearMapMarkers();
 
-    // Apply category & search query filters
     const filteredNews = newsData.filter(item => {
         const matchesCategory = activeCategory === 'all' || item.category === activeCategory;
         const searchString = `${item.title} ${item.description} ${item.location} ${item.source} ${item.originalTitle || ''} ${item.originalDescription || ''}`.toLowerCase();
@@ -326,7 +366,6 @@ function renderNews() {
         return matchesCategory && matchesSearch;
     });
 
-    // Update count badge
     countEl.textContent = `${filteredNews.length} Stories`;
 
     if (filteredNews.length === 0) {
@@ -336,110 +375,183 @@ function renderNews() {
                 <p>No matching stories found. Check other positive tags!</p>
             </div>
         `;
+        updateMapHint(0, 0);
         return;
     }
 
-    // Render cards
     filteredNews.forEach((item, index) => {
+        const hasPin = Array.isArray(item.coords) && item.coords.length === 2;
         const card = document.createElement("div");
-        card.className = "news-card";
+        card.className = "news-card" + (hasPin ? "" : " no-pin");
         card.setAttribute("data-cat", item.category);
         card.setAttribute("data-id", index);
 
-        // Format nice tag class
-        let tagClass = "culture";
-        if (item.category.includes("Nature")) tagClass = "nature";
-        else if (item.category.includes("Tech")) tagClass = "tech";
-        else if (item.category.includes("Solidarity")) tagClass = "solidarity";
-        else if (item.category.includes("Success")) tagClass = "sports";
-
         card.innerHTML = `
             <div class="card-top-meta">
-                <span class="card-category ${tagClass}">${item.category}</span>
-                <span class="card-source">${item.source}</span>
+                <span class="card-category ${categoryTagClass(item.category)}">${escapeHtml(item.category)}</span>
+                <span class="card-source">${escapeHtml(item.source)}</span>
             </div>
-            <h3>${item.title}</h3>
-            ${item.originalTitle ? `<p class="card-original-title"><i class="fa-solid fa-language"></i> ${item.originalTitle}</p>` : ''}
-            <p>${item.description}</p>
+            <h3>${escapeHtml(item.title)}</h3>
+            ${item.originalTitle ? `<p class="card-original-title"><i class="fa-solid fa-language"></i> ${escapeHtml(item.originalTitle)}</p>` : ''}
+            ${item.description ? `<p>${escapeHtml(item.description)}</p>` : ''}
             <div class="card-bottom-meta">
-                <span class="card-location"><i class="fa-solid fa-location-dot"></i> ${item.location}</span>
-                <span>${formatDate(item.pubDate)}</span>
+                <span class="card-location" title="${hasPin ? 'Show on map' : 'Nationwide story - no single place to pin'}">
+                    <i class="fa-solid ${hasPin ? 'fa-location-dot' : 'fa-flag'}"></i> ${hasPin ? escapeHtml(item.location) : 'Nationwide'}
+                </span>
+                <span title="${escapeHtml(item.pubDate)}">${timeAgo(item.pubDate)}</span>
             </div>
-            <a href="${item.link}" target="_blank" rel="noopener" class="hero-link card-read-link">Read Full <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+            <a href="${safeUrl(item.link)}" target="_blank" rel="noopener" class="hero-link card-read-link">Read Full <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
         `;
 
-        // Card Click Handler: pan/select on the card body, but let the "Read Full" link behave normally
         card.addEventListener("click", (e) => {
             if (e.target.closest(".card-read-link")) return;
-            selectNewsItem(item, card);
+            selectNewsItem(index);
         });
 
         feedContainer.appendChild(card);
+        cardsById[index] = card;
 
-        // Add a marker for every story with valid coordinates, including nationwide
-        // stories that fall back to the Athens pin (no specific city was mentioned).
-        if (item.coords && item.coords.length === 2) {
-            addMapMarker(item, index, card);
-        }
+        if (hasPin) addStoryToMap(item, index);
     });
+
+    buildMapMarkers();
+    updateMapHint(filteredNews.filter(i => Array.isArray(i.coords)).length, filteredNews.length);
+
+    if (!hasFittedMap && markers.length > 0) {
+        fitMapToMarkers();
+        hasFittedMap = true;
+    }
 }
 
 // 11. Interactive Map Marker Helpers
-function addMapMarker(item, idIndex, cardElement) {
-    const customIcon = L.divIcon({
-        className: 'custom-leaflet-marker',
-        html: `<div class="pulsing-marker-pin" id="marker-pin-${idIndex}" title="${item.location}"></div>`,
-        iconSize: [20, 20],
-        iconAnchor: [10, 10]
-    });
+// Stories at the same place share ONE pin (with a count) and one popup listing them all.
+// Before, each story got its own pin stacked on top of the others, so clicking a pin or a card
+// often opened a different story than the one you picked.
+let cardsById = {};
+let locationGroups = new Map();   // "lat,lon" -> { location, coords, stories: [{ item, id }], marker }
+let storyToGroupKey = {};         // story id -> group key
 
-    const marker = L.marker(item.coords, { icon: customIcon }).addTo(map);
-    
-    // Bind Leaflet popup card
-    const popupContent = `
+function groupKey(coords) {
+    return `${coords[0].toFixed(3)},${coords[1].toFixed(3)}`;
+}
+
+function addStoryToMap(item, id) {
+    const key = groupKey(item.coords);
+    if (!locationGroups.has(key)) {
+        locationGroups.set(key, { location: item.location, coords: item.coords, stories: [], marker: null });
+    }
+    locationGroups.get(key).stories.push({ item, id });
+    storyToGroupKey[id] = key;
+}
+
+function buildMapMarkers() {
+    locationGroups.forEach((group, key) => {
+        const count = group.stories.length;
+        const icon = L.divIcon({
+            className: 'custom-leaflet-marker',
+            html: `<div class="pulsing-marker-pin${count > 1 ? ' multi' : ''}" title="${escapeHtml(group.location)}">${count > 1 ? count : ''}</div>`,
+            iconSize: [26, 26],
+            iconAnchor: [13, 13]
+        });
+
+        const marker = L.marker(group.coords, { icon, riseOnHover: true }).addTo(map);
+        marker.bindPopup(buildPopupHtml(group), { offset: [0, -6], maxWidth: 260 });
+
+        // Pin click -> highlight every story from this place in the feed
+        marker.on("click", () => {
+            highlightCards(group.stories.map(s => s.id));
+            const first = cardsById[group.stories[0].id];
+            if (first) first.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        });
+
+        group.marker = marker;
+        markers.push(marker);
+    });
+}
+
+function buildPopupHtml(group, activeId = null) {
+    const rows = group.stories.map(({ item, id }) => `
+        <li class="popup-story${id === activeId ? ' active' : ''}" data-story-id="${id}">
+            <span class="popup-cat">${escapeHtml(item.category)}</span>
+            <p>${escapeHtml(item.title)}</p>
+            <a href="${safeUrl(item.link)}" target="_blank" rel="noopener" class="hero-link">Read Full <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+        </li>`).join("");
+    const label = group.stories.length > 1 ? `${group.stories.length} stories` : '1 story';
+    return `
         <div class="map-popup-card">
-            <span>${item.category}</span>
-            <h4>${item.location}</h4>
-            <p>${item.title}</p>
-            <a href="${item.link}" target="_blank" class="hero-link">Read Full <i class="fa-solid fa-arrow-up-right-from-square"></i></a>
-        </div>
-    `;
-    
-    marker.bindPopup(popupContent, { offset: [0, -5] });
-    
-    // Pin click hooks selection in feed
-    marker.on("click", () => {
-        // Highlight corresponding card in feed list
-        document.querySelectorAll(".news-card").forEach(c => c.classList.remove("selected-card"));
-        cardElement.classList.add("selected-card");
-        cardElement.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-    });
-
-    markers.push(marker);
+            <h4><i class="fa-solid fa-location-dot"></i> ${escapeHtml(group.location)} <small>· ${label}</small></h4>
+            <ul class="popup-story-list">${rows}</ul>
+        </div>`;
 }
 
 function clearMapMarkers() {
     markers.forEach(m => map.removeLayer(m));
     markers = [];
+    locationGroups = new Map();
+    storyToGroupKey = {};
+    cardsById = {};
 }
 
-function selectNewsItem(item, cardElement) {
-    // Toggle styles
+function fitMapToMarkers() {
+    const bounds = L.latLngBounds(markers.map(m => m.getLatLng()));
+    map.fitBounds(bounds.pad(0.25), { maxZoom: 7 });
+}
+
+function highlightCards(ids) {
     document.querySelectorAll(".news-card").forEach(c => c.classList.remove("selected-card"));
-    cardElement.classList.add("selected-card");
-    
-    // Pan map to location with slight zoom
-    if (item.coords && item.coords.length === 2) {
-        map.setView(item.coords, 9, { animate: true, duration: 1.2 });
-        
-        // Find matching marker and pop open popup card
-        markers.forEach(m => {
-            const latLng = m.getLatLng();
-            if (latLng.lat === item.coords[0] && latLng.lng === item.coords[1]) {
-                setTimeout(() => m.openPopup(), 1200);
-            }
-        });
+    ids.forEach(id => cardsById[id] && cardsById[id].classList.add("selected-card"));
+}
+
+// Card click -> fly to that story's pin and open the popup with that story highlighted
+function selectNewsItem(id) {
+    highlightCards([id]);
+    const key = storyToGroupKey[id];
+    if (!key) {
+        flashMapHint("This is a nationwide story, so it has no single pin on the map.");
+        return;
     }
+    const group = locationGroups.get(key);
+    group.marker.setPopupContent(buildPopupHtml(group, id));
+    const targetZoom = Math.max(map.getZoom(), 8);
+    const alreadyThere = map.getZoom() === targetZoom && map.getCenter().distanceTo(group.coords) < 100;
+    if (alreadyThere) {
+        group.marker.openPopup();
+    } else {
+        map.once("moveend", () => group.marker.openPopup());
+        map.flyTo(group.coords, targetZoom, { duration: 1 });
+    }
+}
+
+// Clicking a story inside a popup selects its card in the feed
+document.addEventListener("click", (e) => {
+    const row = e.target.closest(".popup-story");
+    if (!row || e.target.closest("a")) return;
+    const id = Number(row.getAttribute("data-story-id"));
+    highlightCards([id]);
+    document.querySelectorAll(".popup-story").forEach(r => r.classList.toggle("active", r === row));
+    if (cardsById[id]) cardsById[id].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+let defaultMapHint = "";
+function updateMapHint(pinned, total) {
+    const hint = document.querySelector(".map-hint");
+    if (!hint) return;
+    const nationwide = total - pinned;
+    defaultMapHint = total === 0 ? "No stories to show"
+        : `${pinned} of ${total} stories pinned` + (nationwide ? ` · ${nationwide} nationwide` : "");
+    hint.textContent = defaultMapHint;
+}
+
+function flashMapHint(text) {
+    const hint = document.querySelector(".map-hint");
+    if (!hint) return;
+    hint.textContent = text;
+    hint.classList.add("flash");
+    clearTimeout(flashMapHint._t);
+    flashMapHint._t = setTimeout(() => {
+        hint.textContent = defaultMapHint;
+        hint.classList.remove("flash");
+    }, 3500);
 }
 
 // 12. Filtering Event Handlers
@@ -460,13 +572,27 @@ function handleCategoryFilter(e) {
     renderNews();
 }
 
-// Helper: Format Date String
-function formatDate(dateStr) {
-    try {
-        const d = new Date(dateStr);
-        if (isNaN(d.getTime())) return dateStr;
-        return d.toLocaleDateString("en-US", { day: 'numeric', month: 'short' });
-    } catch {
-        return dateStr;
-    }
+// Helpers
+function timeAgo(dateStr) {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr || "";
+    const mins = Math.round((Date.now() - d.getTime()) / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins} min ago`;
+    const hrs = Math.round(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    const days = Math.round(hrs / 24);
+    if (days < 7) return `${days}d ago`;
+    return d.toLocaleDateString("en-GB", { day: 'numeric', month: 'short' });
+}
+
+// Feed text comes from third-party sites, so never drop it into HTML unescaped.
+function escapeHtml(value) {
+    return String(value ?? "").replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[ch]));
+}
+
+function safeUrl(url) {
+    return /^https?:\/\//i.test(url || "") ? escapeHtml(url) : "#";
 }
