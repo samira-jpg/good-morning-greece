@@ -84,6 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initTicker();
     fetchNews();
     fetchWeather();
+    fetchOnThisDay();
 
     // Event Listeners
     document.getElementById("news-search").addEventListener("input", handleSearch);
@@ -130,41 +131,47 @@ function initMap() {
     }).addTo(map);
 }
 
-// 6. Dynamic Optimism Index Circular Gauge Component
+// 6. Header optimism score (the big gauge card was replaced by "On This Day")
 function updateOptimismIndex(newsItems) {
-    const fillEl = document.getElementById("gauge-index-fill");
-    const textEl = document.getElementById("gauge-index-text");
     const headerValEl = document.getElementById("header-index-val");
-    const statusEl = document.getElementById("gauge-status");
-    const descEl = document.getElementById("gauge-description");
-
-    // Dynamic Positivity Index Calculation
-    // Base is 76% (Greece is generally positive!). Adding increments for positive news count
+    if (!headerValEl) return;
     const countBonus = Math.min(12, newsItems.length * 0.8);
-    const score = Math.round(76 + countBonus);
-    
-    // Animate radial gauge
-    // Circumference of radial progress circle (r=40) is 2 * PI * 40 = 251.2
-    const circumference = 251.2;
-    const offset = circumference - (score / 100) * circumference;
-    
-    fillEl.style.strokeDashoffset = offset;
-    textEl.textContent = `${score}%`;
-    headerValEl.textContent = `${score}%`;
+    headerValEl.textContent = `${Math.round(76 + countBonus)}%`;
+}
 
-    // Dynamic statuses and text descriptions
-    if (score >= 90) {
-        statusEl.textContent = "Radiant Optimism";
-        statusEl.style.color = "var(--color-green)";
-        descEl.textContent = "Greece is absolutely glowing! Outstanding levels of solar output, massive cultural achievements, and widespread community solidarity projects drive today's historic rating.";
-    } else if (score >= 80) {
-        statusEl.textContent = "Very Optimistic";
-        statusEl.style.color = "var(--color-greek-blue)";
-        descEl.textContent = "A wonderful morning in Greece! High solar generation combined with exciting archaeological findings and athletic triumphs have generated a highly positive outlook across the country.";
-    } else {
-        statusEl.textContent = "Optimistic";
-        statusEl.style.color = "var(--color-gold)";
-        descEl.textContent = "Positive trends are developing. Local solidary networks are active, and tourism returns bring cheer and financial support to island communities.";
+// 6b. On This Day in History Component
+async function fetchOnThisDay() {
+    const listEl = document.getElementById("onthisday-list");
+    const dateEl = document.getElementById("onthisday-date");
+    try {
+        const response = await fetch('/api/onthisday');
+        const data = await response.json();
+        dateEl.textContent = data.label || "";
+
+        if (!data.items || data.items.length === 0) {
+            listEl.innerHTML = `<li class="onthisday-loading">${escapeHtml(data.error || "Nothing recorded for today.")}</li>`;
+            return;
+        }
+
+        listEl.innerHTML = data.items.map(item => {
+            const year = item.year ? item.year : "";
+            const tag = item.kind === "birth" ? "Born" : item.kind === "holiday" ? "Celebrated" : "";
+            const text = escapeHtml(item.text);
+            return `
+                <li class="onthisday-item${item.greek ? ' greek' : ''}">
+                    <span class="onthisday-year">${escapeHtml(year)}</span>
+                    <div class="onthisday-body">
+                        ${item.greek || tag ? `<div class="onthisday-tags">
+                            ${item.greek ? '<span class="onthisday-tag greek">Greece</span>' : ''}
+                            ${tag ? `<span class="onthisday-tag">${tag}</span>` : ''}
+                        </div>` : ''}
+                        <p>${item.link ? `<a href="${safeUrl(item.link)}" target="_blank" rel="noopener">${text}</a>` : text}</p>
+                    </div>
+                </li>`;
+        }).join("");
+    } catch (error) {
+        console.error("Error fetching On This Day:", error);
+        listEl.innerHTML = `<li class="onthisday-loading">History is unavailable right now.</li>`;
     }
 }
 

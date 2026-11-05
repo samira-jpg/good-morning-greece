@@ -557,66 +557,98 @@ body {
     flex-shrink: 0;
 }
 
-/* Widget 1: Optimism Radial Index Gauge */
-.gauge-widget-content {
-    padding: 16px;
+/* Widget 1: On This Day in History */
+.onthisday-content {
+    padding: 12px 16px 14px;
     display: flex;
-    align-items: center;
-    gap: 16px;
+    flex-direction: column;
+    gap: 8px;
 }
 
-.gauge-container {
-    width: 90px;
-    height: 90px;
+.onthisday-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 260px;
+    overflow-y: auto;
 }
 
-.radial-gauge {
-    width: 100%;
-    height: 100%;
+.onthisday-item {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    padding-left: 10px;
+    border-left: 3px solid var(--color-border);
 }
 
-.gauge-bg {
-    fill: none;
-    stroke: rgba(0, 90, 156, 0.08);
-    stroke-width: 8px;
+.onthisday-item.greek {
+    border-left-color: var(--color-greek-blue);
 }
 
-.gauge-fill {
-    fill: none;
-    stroke: var(--color-greek-blue);
-    stroke-width: 8px;
-    stroke-linecap: round;
-    transition: stroke-dashoffset 1.5s cubic-bezier(0.4, 0, 0.2, 1);
-    transform: rotate(-90deg);
-    transform-origin: 50% 50%;
-}
-
-.gauge-text {
-    font-family: 'Outfit', sans-serif;
-    font-size: 18px;
-    font-weight: 700;
-    fill: var(--color-greek-blue);
-    text-anchor: middle;
-}
-
-.gauge-details {
-    flex: 1;
-}
-
-.gauge-details h4 {
-    font-size: 15px;
+.onthisday-year {
+    flex-shrink: 0;
+    min-width: 42px;
+    font-size: 13px;
     font-weight: 700;
     color: var(--color-greek-blue);
-    margin-bottom: 4px;
 }
 
-.gauge-details p {
-    font-size: 11px;
+.onthisday-body p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--color-text-dark);
+}
+
+.onthisday-body a {
+    color: inherit;
+    text-decoration: none;
+}
+
+.onthisday-body a:hover {
+    color: var(--color-greek-blue);
+    text-decoration: underline;
+}
+
+.onthisday-tags {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 2px;
+}
+
+.onthisday-tag {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
     color: var(--color-text-muted);
-    line-height: 1.4;
 }
 
-/* Widget 2: Ancient Wisdom Card */
+.onthisday-tag.greek {
+    color: var(--color-greek-blue);
+}
+
+.onthisday-loading {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    text-align: center;
+    padding: 12px 0;
+}
+
+.onthisday-credit {
+    margin: 0;
+    font-size: 10px;
+    color: var(--color-text-muted);
+    text-align: right;
+}
+
+.onthisday-credit a {
+    color: inherit;
+}
+
 .quote-widget-content {
     padding: 16px;
     display: flex;

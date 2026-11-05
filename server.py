@@ -479,6 +479,98 @@ def background_news_loop():
             success = False
         time.sleep(REFRESH_SECONDS if success else RETRY_SECONDS)
 
+# ---- "On This Day" history widget ----
+# Wikipedia's "On this day" feed lists notable events, births and holidays for a calendar date.
+# We put Greece-related entries first, then fill up with a few world events.
+try:
+    from zoneinfo import ZoneInfo
+    ATHENS_TZ = ZoneInfo("Europe/Athens")
+except Exception:  # tz database unavailable: fall back to a fixed offset
+    ATHENS_TZ = datetime.timezone(datetime.timedelta(hours=2))
+
+ONTHISDAY_URL = "https://en.wikipedia.org/api/rest_v1/feed/onthisday/all/{month:02d}/{day:02d}"
+WIKI_HEADERS = {
+    # Wikimedia asks API clients to identify themselves.
+    "User-Agent": "GoodMorningGreece/1.0 (https://github.com/samira-jpg/good-morning-greece)",
+    "Accept": "application/json",
+}
+GREEK_HISTORY_RE = re.compile(
+    r"\b(?:Greece|Greek|Greeks|Hellenic|Hellenistic|Athens|Athenian|Sparta|Spartan|Byzantine|Byzantium|"
+    r"Constantinople|Crete|Cretan|Thessaloniki|Salonica|Rhodes|Corfu|Peloponnese|Delphi|Olympia|"
+    r"Macedon|Ancient Macedonia|Aegean|Ionian|Piraeus|Epirus|Thessaly|Thrace|Dodecanese|Cyclades|"
+    r"Acropolis|Parthenon|Minoan|Mycenaean|Venizelos|Kapodistrias)\b"
+)
+MAX_GREEK_ITEMS = 6
+MAX_WORLD_ITEMS = 4
+
+onthisday_cache = {"date": None, "payload": None, "failed_at": 0}
+onthisday_lock = threading.Lock()
+
+def _wiki_entry(raw, kind):
+    pages = raw.get("pages") or []
+    page = pages[0] if pages else {}
+    page_titles = " ".join((p.get("titles") or {}).get("normalized", "") for p in pages)
+    thumb = (page.get("thumbnail") or {}).get("source")
+    return {
+        "year": raw.get("year"),
+        "text": raw.get("text", "").strip(),
+        "kind": kind,  # "event", "birth" or "holiday"
+        "link": ((page.get("content_urls") or {}).get("desktop") or {}).get("page"),
+        "pageTitle": (page.get("titles") or {}).get("normalized"),
+        "thumbnail": thumb,
+        "greek": bool(GREEK_HISTORY_RE.search(raw.get("text", "") + " " + page_titles)),
+    }
+
+def fetch_on_this_day(today):
+    url = ONTHISDAY_URL.format(month=today.month, day=today.day)
+    req = urllib.request.Request(url, headers=WIKI_HEADERS)
+    with urllib.request.urlopen(req, timeout=10) as response:
+        data = json.loads(response.read().decode("utf-8"))
+
+    entries, seen = [], set()
+    for kind, key in (("event", "selected"), ("event", "events"), ("birth", "births"), ("holiday", "holidays")):
+        for raw in data.get(key) or []:
+            entry = _wiki_entry(raw, kind)
+            dedupe_key = (entry["year"], entry["text"][:60])
+            if not entry["text"] or dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            entries.append(entry)
+
+    # Greek history first (events before births/holidays), then a handful of world events.
+    kind_order = {"event": 0, "holiday": 1, "birth": 2}
+    greek = sorted((e for e in entries if e["greek"]), key=lambda e: kind_order[e["kind"]])[:MAX_GREEK_ITEMS]
+    world = [e for e in entries if not e["greek"] and e["kind"] == "event"][:MAX_WORLD_ITEMS]
+    items = sorted(greek + world, key=lambda e: (not e["greek"], kind_order[e["kind"]], -(e["year"] or 0)))
+    return {
+        "date": today.strftime("%Y-%m-%d"),
+        "label": f"{today.day} {today.strftime('%B')}",
+        "items": items,
+        "source": "Wikipedia",
+    }
+
+def get_on_this_day():
+    """Returns today's (Athens time) history entries, fetched at most once per day."""
+    today = datetime.datetime.now(ATHENS_TZ).date()
+    with onthisday_lock:
+        if onthisday_cache["date"] == today and onthisday_cache["payload"]:
+            return onthisday_cache["payload"]
+        # After a failure, wait 10 minutes before asking Wikipedia again.
+        if time.time() - onthisday_cache["failed_at"] < 600:
+            return _onthisday_error(today)
+        try:
+            payload = fetch_on_this_day(today)
+            onthisday_cache.update(date=today, payload=payload)
+            return payload
+        except Exception as e:
+            print(f"Error fetching On This Day from Wikipedia: {e}")
+            onthisday_cache["failed_at"] = time.time()
+            return _onthisday_error(today)
+
+def _onthisday_error(today):
+    return {"date": today.strftime("%Y-%m-%d"), "label": f"{today.day} {today.strftime('%B')}",
+            "items": [], "error": "History is unavailable right now."}
+
 class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def translate_path(self, path):
         parsed = urlparse(path)
@@ -490,9 +582,12 @@ class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
         parsed_url = urlparse(self.path)
 
-        if parsed_url.path == '/api/news':
-            with cache_lock:
-                payload = dict(news_cache)
+        if parsed_url.path in ('/api/news', '/api/onthisday'):
+            if parsed_url.path == '/api/news':
+                with cache_lock:
+                    payload = dict(news_cache)
+            else:
+                payload = get_on_this_day()
             body = json.dumps(payload).encode('utf-8')
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
