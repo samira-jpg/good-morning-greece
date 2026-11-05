@@ -85,6 +85,7 @@ document.addEventListener("DOMContentLoaded", () => {
     fetchNews();
     fetchWeather();
     fetchOnThisDay();
+    renderNameday();
 
     // Event Listeners
     document.getElementById("news-search").addEventListener("input", handleSearch);
@@ -172,6 +173,38 @@ async function fetchOnThisDay() {
         console.error("Error fetching On This Day:", error);
         featureEl.innerHTML = `<p class="onthisday-loading">History is unavailable right now.</p>`;
     }
+}
+
+// 6c. Name Day Component
+function renderNameday() {
+    const el = document.getElementById("nameday-content");
+    if (!el || typeof getNamedays !== "function") return;
+
+    // Use today's date in Greece, not the visitor's own time zone.
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Athens", year: "numeric", month: "2-digit", day: "2-digit" })
+        .formatToParts(new Date());
+    const get = type => Number(parts.find(p => p.type === type).value);
+    const names = getNamedays(get("year"), get("month"), get("day"));
+
+    if (names.length === 0) {
+        el.innerHTML = `
+            <p class="nameday-intro">No major name day today.</p>
+            <p class="nameday-wish">Χρόνια πολλά to anyone celebrating a saint today — wishing you a wonderful day!</p>`;
+        return;
+    }
+
+    const englishList = joinNames(names.map(([, en]) => en));
+    el.innerHTML = `
+        <p class="nameday-intro">Today is the name day of</p>
+        <ul class="nameday-names">
+            ${names.map(([gr, en]) => `<li><span class="nameday-gr">${escapeHtml(gr)}</span><span class="nameday-en">${escapeHtml(en)}</span></li>`).join("")}
+        </ul>
+        <p class="nameday-wish">Χρόνια πολλά! Wishing a very happy name day to every ${escapeHtml(englishList)} — may the year ahead bring you health, joy and plenty of sunshine.</p>`;
+}
+
+function joinNames(list) {
+    if (list.length <= 1) return list.join("");
+    return `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
 }
 
 // 7. Ancient Philosophy Quote Component
