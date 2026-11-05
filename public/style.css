@@ -324,6 +324,7 @@ body {
 
 /* News Cards */
 .news-card {
+    flex-shrink: 0; /* don't squash cards (and clip titles) when the feed overflows */
     background: var(--color-white);
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
@@ -384,6 +385,7 @@ body {
 .card-category.tech { color: var(--color-aegean-blue); }
 .card-category.solidarity { color: var(--color-gold); }
 .card-category.sports { color: var(--color-red); }
+.card-category.tourism { color: #00838F; }
 
 .card-source {
     font-size: 11px;
@@ -1009,4 +1011,80 @@ body {
     .map-container-wrapper {
         height: 350px;
     }
+}
+
+/* ---- Map <-> news linking ---- */
+.feed-header-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.news-updated {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.news-updated.stale {
+    color: var(--color-red);
+}
+
+/* Pins holding several stories show a count */
+.pulsing-marker-pin.multi {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--color-greek-blue);
+    color: var(--color-white);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.map-hint.flash {
+    color: var(--color-greek-blue);
+    font-weight: 600;
+}
+
+.news-card.no-pin .card-location {
+    color: var(--color-text-muted);
+}
+
+.map-popup-card h4 small {
+    font-weight: 500;
+    color: var(--color-text-muted);
+}
+
+.popup-story-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.popup-story {
+    padding: 6px;
+    border-radius: 6px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+}
+
+.popup-story + .popup-story {
+    border-top: 1px solid var(--color-border);
+}
+
+.popup-story:hover {
+    background: var(--color-aegean-light);
+}
+
+.popup-story.active {
+    background: var(--color-aegean-light);
+    border-left-color: var(--color-greek-blue);
+}
+
+.map-popup-card .popup-story p {
+    margin-bottom: 4px;
 }
