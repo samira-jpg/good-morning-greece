@@ -500,8 +500,6 @@ GREEK_HISTORY_RE = re.compile(
     r"Macedon|Ancient Macedonia|Aegean|Ionian|Piraeus|Epirus|Thessaly|Thrace|Dodecanese|Cyclades|"
     r"Acropolis|Parthenon|Minoan|Mycenaean|Venizelos|Kapodistrias)\b"
 )
-MAX_GREEK_ITEMS = 6
-MAX_WORLD_ITEMS = 4
 
 onthisday_cache = {"date": None, "payload": None, "failed_at": 0}
 onthisday_lock = threading.Lock()
@@ -512,6 +510,7 @@ def _wiki_entry(raw, kind):
     page_titles = " ".join((p.get("titles") or {}).get("normalized", "") for p in pages)
     thumb = (page.get("thumbnail") or {}).get("source")
     return {
+        "extract": (page.get("extract") or "").strip(),
         "year": raw.get("year"),
         "text": raw.get("text", "").strip(),
         "kind": kind,  # "event", "birth" or "holiday"
@@ -537,15 +536,21 @@ def fetch_on_this_day(today):
             seen.add(dedupe_key)
             entries.append(entry)
 
-    # Greek history first (events before births/holidays), then a handful of world events.
-    kind_order = {"event": 0, "holiday": 1, "birth": 2}
-    greek = sorted((e for e in entries if e["greek"]), key=lambda e: kind_order[e["kind"]])[:MAX_GREEK_ITEMS]
-    world = [e for e in entries if not e["greek"] and e["kind"] == "event"][:MAX_WORLD_ITEMS]
-    items = sorted(greek + world, key=lambda e: (not e["greek"], kind_order[e["kind"]], -(e["year"] or 0)))
+    # Show ONE featured event. Preference order:
+    #   1. a Greek event with a picture   2. any Greek event
+    #   3. one of Wikipedia's hand-picked "selected" world events with a picture   4. anything
+    # Births and holidays are skipped - an event makes the better story.
+    events = [e for e in entries if e["kind"] == "event"]
+    featured = (
+        next((e for e in events if e["greek"] and e["thumbnail"]), None)
+        or next((e for e in events if e["greek"]), None)
+        or next((e for e in events if e["thumbnail"]), None)
+        or (events[0] if events else None)
+    )
     return {
         "date": today.strftime("%Y-%m-%d"),
         "label": f"{today.day} {today.strftime('%B')}",
-        "items": items,
+        "featured": featured,
         "source": "Wikipedia",
     }
 
@@ -569,7 +574,7 @@ def get_on_this_day():
 
 def _onthisday_error(today):
     return {"date": today.strftime("%Y-%m-%d"), "label": f"{today.day} {today.strftime('%B')}",
-            "items": [], "error": "History is unavailable right now."}
+            "featured": None, "error": "History is unavailable right now."}
 
 class CustomHTTPRequestHandler(http.server.SimpleHTTPRequestHandler):
     def translate_path(self, path):

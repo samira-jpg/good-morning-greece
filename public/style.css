@@ -559,79 +559,77 @@ body {
 
 /* Widget 1: On This Day in History */
 .onthisday-content {
-    padding: 12px 16px 14px;
+    padding: 14px 16px;
     display: flex;
     flex-direction: column;
     gap: 8px;
 }
 
-.onthisday-list {
-    list-style: none;
-    margin: 0;
-    padding: 0;
+.onthisday-feature {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    max-height: 260px;
-    overflow-y: auto;
+    gap: 8px;
 }
 
-.onthisday-item {
+.onthisday-image {
+    width: 100%;
+    height: 150px;
+    object-fit: cover;
+    border-radius: var(--radius-md);
+    background: var(--color-aegean-light);
+}
+
+.onthisday-meta {
     display: flex;
-    gap: 12px;
-    align-items: flex-start;
-    padding-left: 10px;
-    border-left: 3px solid var(--color-border);
-}
-
-.onthisday-item.greek {
-    border-left-color: var(--color-greek-blue);
+    align-items: baseline;
+    gap: 8px;
 }
 
 .onthisday-year {
-    flex-shrink: 0;
-    min-width: 42px;
-    font-size: 13px;
+    font-size: 22px;
     font-weight: 700;
     color: var(--color-greek-blue);
+    line-height: 1;
 }
 
-.onthisday-body p {
-    margin: 0;
-    font-size: 12px;
-    line-height: 1.45;
-    color: var(--color-text-dark);
-}
-
-.onthisday-body a {
-    color: inherit;
-    text-decoration: none;
-}
-
-.onthisday-body a:hover {
-    color: var(--color-greek-blue);
-    text-decoration: underline;
-}
-
-.onthisday-tags {
-    display: flex;
-    gap: 4px;
-    margin-bottom: 2px;
+.onthisday-ago {
+    font-size: 11px;
+    color: var(--color-text-muted);
 }
 
 .onthisday-tag {
+    margin-left: auto;
     font-size: 9px;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.04em;
-    color: var(--color-text-muted);
+    color: var(--color-greek-blue);
+    background: var(--color-aegean-light);
+    padding: 2px 6px;
+    border-radius: 999px;
 }
 
-.onthisday-tag.greek {
-    color: var(--color-greek-blue);
+.onthisday-headline {
+    margin: 0;
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1.4;
+    color: var(--color-text-dark);
+}
+
+.onthisday-extract {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--color-text-muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
 .onthisday-loading {
+    margin: 0;
     font-size: 12px;
     color: var(--color-text-muted);
     text-align: center;

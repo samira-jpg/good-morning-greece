@@ -139,39 +139,38 @@ function updateOptimismIndex(newsItems) {
     headerValEl.textContent = `${Math.round(76 + countBonus)}%`;
 }
 
-// 6b. On This Day in History Component
+// 6b. On This Day in History Component - one featured event with its Wikipedia picture
 async function fetchOnThisDay() {
-    const listEl = document.getElementById("onthisday-list");
+    const featureEl = document.getElementById("onthisday-feature");
     const dateEl = document.getElementById("onthisday-date");
     try {
         const response = await fetch('/api/onthisday');
         const data = await response.json();
         dateEl.textContent = data.label || "";
 
-        if (!data.items || data.items.length === 0) {
-            listEl.innerHTML = `<li class="onthisday-loading">${escapeHtml(data.error || "Nothing recorded for today.")}</li>`;
+        const item = data.featured;
+        if (!item) {
+            featureEl.innerHTML = `<p class="onthisday-loading">${escapeHtml(data.error || "Nothing recorded for today.")}</p>`;
             return;
         }
 
-        listEl.innerHTML = data.items.map(item => {
-            const year = item.year ? item.year : "";
-            const tag = item.kind === "birth" ? "Born" : item.kind === "holiday" ? "Celebrated" : "";
-            const text = escapeHtml(item.text);
-            return `
-                <li class="onthisday-item${item.greek ? ' greek' : ''}">
-                    <span class="onthisday-year">${escapeHtml(year)}</span>
-                    <div class="onthisday-body">
-                        ${item.greek || tag ? `<div class="onthisday-tags">
-                            ${item.greek ? '<span class="onthisday-tag greek">Greece</span>' : ''}
-                            ${tag ? `<span class="onthisday-tag">${tag}</span>` : ''}
-                        </div>` : ''}
-                        <p>${item.link ? `<a href="${safeUrl(item.link)}" target="_blank" rel="noopener">${text}</a>` : text}</p>
-                    </div>
-                </li>`;
-        }).join("");
+        const yearsAgo = item.year ? new Date().getFullYear() - item.year : null;
+        featureEl.innerHTML = `
+            ${item.thumbnail ? `<img class="onthisday-image" src="${safeUrl(item.thumbnail)}" alt="${escapeHtml(item.pageTitle || '')}" loading="lazy">` : ''}
+            <div class="onthisday-meta">
+                <span class="onthisday-year">${escapeHtml(item.year || '')}</span>
+                ${yearsAgo ? `<span class="onthisday-ago">${yearsAgo} years ago</span>` : ''}
+                ${item.greek ? '<span class="onthisday-tag greek">Greece</span>' : ''}
+            </div>
+            <h4 class="onthisday-headline">${escapeHtml(item.text)}</h4>
+            ${item.extract ? `<p class="onthisday-extract">${escapeHtml(item.extract)}</p>` : ''}
+            ${item.link ? `<a class="hero-link" href="${safeUrl(item.link)}" target="_blank" rel="noopener">Read more on Wikipedia <i class="fa-solid fa-arrow-up-right-from-square"></i></a>` : ''}
+        `;
+        const img = featureEl.querySelector(".onthisday-image");
+        if (img) img.addEventListener("error", () => img.remove());
     } catch (error) {
         console.error("Error fetching On This Day:", error);
-        listEl.innerHTML = `<li class="onthisday-loading">History is unavailable right now.</li>`;
+        featureEl.innerHTML = `<p class="onthisday-loading">History is unavailable right now.</p>`;
     }
 }
 
