@@ -123,24 +123,27 @@
 
             <!-- Right Panel: Side Widgets Column -->
             <section class="widgets-column">
-                <!-- Widget 1: Optimism & Happiness Gauge -->
-                <div class="grid-panel widget-panel" id="panel-gauge">
+                <!-- Widget 1: On This Day in History -->
+                <div class="grid-panel widget-panel" id="panel-onthisday">
                     <div class="panel-header">
-                        <h3><i class="fa-solid fa-chart-line"></i> Greece Positivity Index</h3>
+                        <h3><i class="fa-solid fa-landmark"></i> On This Day</h3>
+                        <span class="badge" id="onthisday-date"></span>
                     </div>
-                    <div class="gauge-widget-content">
-                        <div class="gauge-container">
-                            <svg class="radial-gauge" viewBox="0 0 100 100">
-                                <circle class="gauge-bg" cx="50" cy="50" r="40"></circle>
-                                <circle class="gauge-fill" id="gauge-index-fill" cx="50" cy="50" r="40" stroke-dasharray="251.2" stroke-dashoffset="251.2"></circle>
-                                <text class="gauge-text" id="gauge-index-text" x="50" y="55">0%</text>
-                            </svg>
-                        </div>
-                        <div class="gauge-details">
-                            <h4 id="gauge-status">Very Optimistic</h4>
-                            <p id="gauge-description">Greece is glowing today! High levels of sunshine, robust renewable output, and cultural achievements drive today's optimism score.</p>
-                        </div>
+                    <div class="onthisday-content">
+                        <article class="onthisday-feature" id="onthisday-feature">
+                            <p class="onthisday-loading">Looking back through history...</p>
+                        </article>
+                        <p class="onthisday-credit">Source: <a href="https://en.wikipedia.org/wiki/Wikipedia:Selected_anniversaries" target="_blank" rel="noopener">Wikipedia</a></p>
                     </div>
+                </div>
+
+                <!-- Widget: Name Day -->
+                <div class="grid-panel widget-panel" id="panel-nameday">
+                    <div class="panel-header">
+                        <h3><i class="fa-solid fa-cake-candles"></i> Name Day</h3>
+                        <span class="badge">Χρόνια πολλά!</span>
+                    </div>
+                    <div class="nameday-content" id="nameday-content"></div>
                 </div>
 
                 <!-- Widget 2: Ancient Wisdom Quote of the Day -->
@@ -223,6 +226,7 @@
     </div>
 
     <!-- Application Script -->
+    <script src="namedays.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

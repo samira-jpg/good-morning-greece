@@ -84,6 +84,8 @@ document.addEventListener("DOMContentLoaded", () => {
     initTicker();
     fetchNews();
     fetchWeather();
+    fetchOnThisDay();
+    renderNameday();
 
     // Event Listeners
     document.getElementById("news-search").addEventListener("input", handleSearch);
@@ -130,42 +132,79 @@ function initMap() {
     }).addTo(map);
 }
 
-// 6. Dynamic Optimism Index Circular Gauge Component
+// 6. Header optimism score (the big gauge card was replaced by "On This Day")
 function updateOptimismIndex(newsItems) {
-    const fillEl = document.getElementById("gauge-index-fill");
-    const textEl = document.getElementById("gauge-index-text");
     const headerValEl = document.getElementById("header-index-val");
-    const statusEl = document.getElementById("gauge-status");
-    const descEl = document.getElementById("gauge-description");
-
-    // Dynamic Positivity Index Calculation
-    // Base is 76% (Greece is generally positive!). Adding increments for positive news count
+    if (!headerValEl) return;
     const countBonus = Math.min(12, newsItems.length * 0.8);
-    const score = Math.round(76 + countBonus);
-    
-    // Animate radial gauge
-    // Circumference of radial progress circle (r=40) is 2 * PI * 40 = 251.2
-    const circumference = 251.2;
-    const offset = circumference - (score / 100) * circumference;
-    
-    fillEl.style.strokeDashoffset = offset;
-    textEl.textContent = `${score}%`;
-    headerValEl.textContent = `${score}%`;
+    headerValEl.textContent = `${Math.round(76 + countBonus)}%`;
+}
 
-    // Dynamic statuses and text descriptions
-    if (score >= 90) {
-        statusEl.textContent = "Radiant Optimism";
-        statusEl.style.color = "var(--color-green)";
-        descEl.textContent = "Greece is absolutely glowing! Outstanding levels of solar output, massive cultural achievements, and widespread community solidarity projects drive today's historic rating.";
-    } else if (score >= 80) {
-        statusEl.textContent = "Very Optimistic";
-        statusEl.style.color = "var(--color-greek-blue)";
-        descEl.textContent = "A wonderful morning in Greece! High solar generation combined with exciting archaeological findings and athletic triumphs have generated a highly positive outlook across the country.";
-    } else {
-        statusEl.textContent = "Optimistic";
-        statusEl.style.color = "var(--color-gold)";
-        descEl.textContent = "Positive trends are developing. Local solidary networks are active, and tourism returns bring cheer and financial support to island communities.";
+// 6b. On This Day in History Component - one featured event with its Wikipedia picture
+async function fetchOnThisDay() {
+    const featureEl = document.getElementById("onthisday-feature");
+    const dateEl = document.getElementById("onthisday-date");
+    try {
+        const response = await fetch('/api/onthisday');
+        const data = await response.json();
+        dateEl.textContent = data.label || "";
+
+        const item = data.featured;
+        if (!item) {
+            featureEl.innerHTML = `<p class="onthisday-loading">${escapeHtml(data.error || "Nothing recorded for today.")}</p>`;
+            return;
+        }
+
+        const yearsAgo = item.year ? new Date().getFullYear() - item.year : null;
+        featureEl.innerHTML = `
+            ${item.thumbnail ? `<img class="onthisday-image" src="${safeUrl(item.thumbnail)}" alt="${escapeHtml(item.pageTitle || '')}" loading="lazy">` : ''}
+            <div class="onthisday-meta">
+                <span class="onthisday-year">${escapeHtml(item.year || '')}</span>
+                ${yearsAgo ? `<span class="onthisday-ago">${yearsAgo} years ago</span>` : ''}
+                ${item.greek ? '<span class="onthisday-tag greek">Greece</span>' : ''}
+            </div>
+            <h4 class="onthisday-headline">${escapeHtml(item.text)}</h4>
+            ${item.extract ? `<p class="onthisday-extract">${escapeHtml(item.extract)}</p>` : ''}
+            ${item.link ? `<a class="hero-link" href="${safeUrl(item.link)}" target="_blank" rel="noopener">Read more on Wikipedia <i class="fa-solid fa-arrow-up-right-from-square"></i></a>` : ''}
+        `;
+        const img = featureEl.querySelector(".onthisday-image");
+        if (img) img.addEventListener("error", () => img.remove());
+    } catch (error) {
+        console.error("Error fetching On This Day:", error);
+        featureEl.innerHTML = `<p class="onthisday-loading">History is unavailable right now.</p>`;
     }
+}
+
+// 6c. Name Day Component
+function renderNameday() {
+    const el = document.getElementById("nameday-content");
+    if (!el || typeof getNamedays !== "function") return;
+
+    // Use today's date in Greece, not the visitor's own time zone.
+    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Athens", year: "numeric", month: "2-digit", day: "2-digit" })
+        .formatToParts(new Date());
+    const get = type => Number(parts.find(p => p.type === type).value);
+    const names = getNamedays(get("year"), get("month"), get("day"));
+
+    if (names.length === 0) {
+        el.innerHTML = `
+            <p class="nameday-intro">No major name day today.</p>
+            <p class="nameday-wish">Χρόνια πολλά to anyone celebrating a saint today — wishing you a wonderful day!</p>`;
+        return;
+    }
+
+    const englishList = joinNames(names.map(([, en]) => en));
+    el.innerHTML = `
+        <p class="nameday-intro">Today is the name day of</p>
+        <ul class="nameday-names">
+            ${names.map(([gr, en]) => `<li><span class="nameday-gr">${escapeHtml(gr)}</span><span class="nameday-en">${escapeHtml(en)}</span></li>`).join("")}
+        </ul>
+        <p class="nameday-wish">Χρόνια πολλά! Wishing a very happy name day to every ${escapeHtml(englishList)} — may the year ahead bring you health, joy and plenty of sunshine.</p>`;
+}
+
+function joinNames(list) {
+    if (list.length <= 1) return list.join("");
+    return `${list.slice(0, -1).join(", ")} and ${list[list.length - 1]}`;
 }
 
 // 7. Ancient Philosophy Quote Component
